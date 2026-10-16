@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TCloud - Global Weather & Time Experience</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome for weather icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts: Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        glass: 'rgba(255, 255, 255, 0.15)',
+                        glassDark: 'rgba(15, 23, 42, 0.65)',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Glassmorphism utility */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .glass-panel-dark {
+            background: rgba(15, 23, 42, 0.5);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        /* Custom scrollbar for forecasts */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.1);
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.5);
+        }
+    </style>
+</head>
+<body class="h-full text-white font-sans antialiased overflow-x-hidden relative selection:bg-indigo-500 selection:text-white">
+
+    <!-- Dynamic Background Video / Animated Fallback Container -->
+    <div class="fixed inset-0 -z-20 overflow-hidden bg-slate-900">
+        <video id="bgVideo" autoplay muted loop playsinline class="absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 opacity-80">
+            <!-- Default dynamic background video URL -->
+            <source src="https://assets.mixkit.co/videos/preview/mixkit-clouds-and-blue-sky-2408-large.mp4" type="video/mp4">
+            Your browser does not support HTML5 video.
+        </video>
+        <!-- Atmospheric gradient overlay for enhanced readability -->
+        <div id="bgOverlay" class="absolute inset-0 bg-gradient-to-br from-indigo-900/60 via-slate-900/70 to-black/85 transition-colors duration-1000"></div>
+    </div>
+
+    <!-- Main App Wrapper -->
+    <div class="min-h-full flex flex-col justify-between p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto relative z-10">
+        
+        <!-- Header / Navigation -->
+        <header class="flex flex-col md:flex-row items-center justify-between gap-4 mb-6">
+            <!-- Brand Logo -->
+            <div class="flex items-center gap-3 cursor-pointer group" onclick="app.resetToDefault()">
+                <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-cyan-400 to-indigo-500 flex items-center justify-center shadow-lg shadow-indigo-500/30 group-hover:scale-105 transition-transform">
+                    <i class="fa-solid fa-cloud-sun text-2xl text-white"></i>
+                </div>
+                <div>
+                    <h1 class="text-2xl font-bold tracking-tight bg-gradient-to-r from-white via-cyan-200 to-indigo-300 bg-clip-text text-transparent">TCloud</h1>
+                    <p class="text-xs text-cyan-200/70 font-medium">Global Weather & Time Intelligence</p>
+                </div>
+            </div>
+
+            <!-- Search Bar & Popular Cities Dropdown / Quick buttons -->
+            <div class="w-full md:w-auto flex-1 max-w-xl flex items-center gap-2">
+                <div class="relative flex-1">
+                    <span class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-300">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                    </span>
+                    <input type="text" id="searchInput" placeholder="Search city or country (e.g., Tokyo, London, Paris)..." 
+                           class="w-full pl-11 pr-24 py-3 rounded-2xl glass-panel text-white placeholder-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400 shadow-xl transition-all">
+                    <!-- Quick Speak Button inside search bar -->
+                    <button id="searchVoiceBtn" onclick="app.speakCurrentWeather()" title="Read Forecast aloud" class="absolute right-2 top-1.5 bottom-1.5 px-3 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/40 text-cyan-200 text-xs font-semibold flex items-center gap-1.5 transition-colors">
+                        <i class="fa-solid fa-volume-high"></i> <span class="hidden sm:inline">Speak</span>
+                    </button>
+                </div>
+                <button onclick="app.handleSearch()" class="px-5 py-3 rounded-2xl bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-semibold text-sm shadow-lg shadow-cyan-500/25 transition-all hover:scale-105 active:scale-95">
+                    Search
+                </button>
+            </div>
+
+            <!-- Controls: Unit Toggle & Geolocation -->
+            <div class="flex items-center gap-3">
+                <!-- Unit Switcher -->
+                <div class="glass-panel p-1 rounded-2xl flex items-center shadow-lg">
+                    <button id="unitCBtn" onclick="app.setUnit('C')" class="px-3 py-1.5 rounded-xl text-xs font-bold transition-all bg-white text-slate-900 shadow-md">°C</button>
+                    <button id="unitFBtn" onclick="app.setUnit('F')" class="px-3 py-1.5 rounded-xl text-xs font-bold transition-all text-slate-300 hover:text-white">°F</button>
+                </div>
+                <!-- Geolocation Button -->
+                <button onclick="app.fetchUserLocationWeather()" title="Use Current Location" class="p-3 rounded-2xl glass-panel hover:bg-white/20 transition-all shadow-lg flex items-center justify-center text-cyan-300 hover:text-white">
+                    <i class="fa-solid fa-location-crosshairs text-lg"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- Quick Select Popular Cities Bar -->
+        <div class="mb-6 flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
+            <span class="text-xs font-semibold uppercase tracking-wider text-cyan-200/70 whitespace-nowrap pl-1">Popular:</span>
+            <div id="quickCities" class="flex items-center gap-2">
+                <!-- Injected dynamically -->
+            </div>
+        </div>
+
+        <!-- Main Dashboard Content Grid -->
+        <main class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8 flex-1">
+            
+            <!-- Left & Center: Current Weather & Forecasts (Span 2) -->
+            <div class="lg:col-span-2 flex flex-col gap-6">
+                
+                <!-- Hero Weather Banner Card -->
+                <div class="glass-panel rounded-3xl p-6 sm:p-8 relative overflow-hidden shadow-2xl flex flex-col justify-between min-h-[280px]">
+                    <!-- Decorative background glow -->
+                    <div class="absolute -right-12 -top-12 w-64 h-64 bg-cyan-500/20 rounded-full blur-3xl pointer-events-none"></div>
+                    <div class="absolute -left-12 -bottom-12 w-64 h-64 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none"></div>
+
+                    <!-- Top row of banner -->
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
+                        <div>
+                            <div class="flex items-center gap-2 mb-1">
+                                <h2 id="cityName" class="text-3xl sm:text-4xl font-extrabold tracking-tight text-white">Loading...</h2>
+                                <span id="countryBadge" class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-white/20 text-cyan-200 uppercase tracking-wider">--</span>
+                            </div>
+                            <p id="localTimeDate" class="text-sm font-medium text-cyan-100/80 flex items-center gap-2">
+                                <i class="fa-regular fa-clock"></i> <span id="timeString">--:--:--</span> | <span id="dateString">--</span>
+                            </p>
+                        </div>
+                        <div class="text-left sm:text-right">
+                            <span id="weatherConditionTag" class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/15 backdrop-blur-md text-sm font-semibold text-cyan-200 border border-white/20 shadow-sm">
+                                <i id="conditionHeaderIcon" class="fa-solid fa-cloud"></i> <span id="conditionText">Clear Sky</span>
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Middle temperature & icon section -->
+                    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 my-6 relative z-10">
+                        <div class="flex items-baseline gap-2">
+                            <span id="tempMain" class="text-6xl sm:text-8xl font-black tracking-tighter text-white">--</span>
+                            <span class="text-3xl sm:text-4xl font-light text-cyan-200">°<span id="tempUnitLabel">C</span></span>
+                        </div>
+                        <div class="flex items-center gap-4 bg-white/10 px-6 py-4 rounded-2xl backdrop-blur-md border border-white/15">
+                            <div id="weatherBigIconContainer" class="text-5xl sm:text-6xl text-cyan-300">
+                                <i id="weatherBigIcon" class="fa-solid fa-sun animate-pulse"></i>
+                            </div>
+                            <div class="text-sm">
+                                <p class="text-slate-300">Feels like <span id="feelsLikeTemp" class="font-bold text-white">--°</span></p>
+                                <p class="text-cyan-200/90 mt-0.5" id="weatherAdvice">Dress comfortably and enjoy your day!</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Bottom mini metrics row inside banner -->
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-4 border-t border-white/15 relative z-10 text-xs sm:text-sm">
+                        <div class="flex items-center gap-3">
+                            <div class="w-9 h-9 rounded-xl bg-cyan-500/20 flex items-center justify-center text-cyan-300">
+                                <i class="fa-solid fa-droplet"></i>
+                            </div>
+                            <div>
+                                <p class="text-slate-300 text-xs">Humidity</p>
+                                <p id="humidityVal" class="font-bold text-white">--%</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <div class="w-9 h-9 rounded-xl bg-cyan-500/20 flex items-center justify-center text-cyan-300">
+                                <i class="fa-solid fa-wind"></i>
+                            </div>
+                            <div>
+                                <p class="text-slate-300 text-xs">Wind Speed</p>
+                                <p id="windVal" class="font-bold text-white">-- km/h</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <div class="w-9 h-9 rounded-xl bg-cyan-500/20 flex items-center justify-center text-cyan-300">
+                                <i class="fa-solid fa-compass"></i>
+                            </div>
+                            <div>
+                                <p class="text-slate-300 text-xs">Pressure</p>
+                                <p id="pressureVal" class="font-bold text-white">-- hPa</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <div class="w-9 h-9 rounded-xl bg-cyan-500/20 flex items-center justify-center text-cyan-300">
+                                <i class="fa-solid fa-eye"></i>
+                            </div>
+                            <div>
+                                <p class="text-slate-300 text-xs">Visibility</p>
+                                <p id="visibilityVal" class="font-bold text-white">-- km</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Hourly Forecast Scroll -->
+                <div class="glass-panel rounded-3xl p-6 shadow-xl">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="font-bold text-lg flex items-center gap-2 text-white">
+                            <i class="fa-solid fa-clock-rotate-left text-cyan-300"></i> Hourly Forecast
+                        </h3>
+                        <span class="text-xs text-cyan-200/70">Next 24 hours</span>
+                    </div>
+                    <div id="hourlyContainer" class="flex items-center gap-4 overflow-x-auto pb-2 scrollbar-thin">
+                        <!-- Injected Hourly Cards -->
+                        <div class="text-slate-300 text-sm py-4">Loading hourly forecast...</div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Right Column: Detailed Metrics & 7-Day Forecast -->
+            <div class="flex flex-col gap-6">
+                
+                <!-- Sun Cycle & UV Index Card -->
+                <div class="glass-panel rounded-3xl p-6 shadow-xl">
+                    <h3 class="font-bold text-lg mb-4 flex items-center gap-2 text-white">
+                        <i class="fa-solid fa-sun text-amber-300"></i> Sun & Environment
+                    </h3>
+                    
+                    <div class="grid grid-cols-2 gap-4 mb-4">
+                        <div class="bg-white/5 p-4 rounded-2xl border border-white/10 flex flex-col items-center text-center">
+                            <i class="fa-solid fa-sunrise text-amber-400 text-2xl mb-2"></i>
+                            <span class="text-xs text-slate-300">Sunrise</span>
+                            <span id="sunriseVal" class="font-bold text-white text-base mt-1">--:--</span>
+                        </div>
+                        <div class="bg-white/5 p-4 rounded-2xl border border-white/10 flex flex-col items-center text-center">
+                            <i class="fa-solid fa-sunset text-orange-400 text-2xl mb-2"></i>
+                            <span class="text-xs text-slate-300">Sunset</span>
+                            <span id="sunsetVal" class="font-bold text-white text-base mt-1">--:--</span>
+                        </div>
+                    </div>
+
+                    <!-- Air Quality & UV Index -->
+                    <div class="space-y-3">
+                        <div class="bg-white/5 p-3.5 rounded-2xl border border-white/10 flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                                <div class="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-300 flex items-center justify-center">
+                                    <i class="fa-solid fa-wind"></i>
+                                </div>
+                                <span class="text-sm font-medium">Air Quality Index</span>
+                            </div>
+                            <span id="aqiVal" class="px-2.5 py-1 rounded-lg bg-emerald-500/30 text-emerald-200 text-xs font-bold">Good (24)</span>
+                        </div>
+                        <div class="bg-white/5 p-3.5 rounded-2xl border border-white/10 flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                                <div class="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-300 flex items-center justify-center">
+                                    <i class="fa-solid fa-sun"></i>
+                                </div>
+                                <span class="text-sm font-medium">UV Index</span>
+                            </div>
+                            <span id="uvVal" class="px-2.5 py-1 rounded-lg bg-amber-500/30 text-amber-200 text-xs font-bold">Moderate (4.2)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 7-Day Weekly Forecast -->
+                <div class="glass-panel rounded-3xl p-6 shadow-xl flex-1">
+                    <h3 class="font-bold text-lg mb-4 flex items-center gap-2 text-white">
+                        <i class="fa-solid fa-calendar-days text-cyan-300"></i> 7-Day Forecast
+                    </h3>
+                    <div id="weeklyContainer" class="space-y-3">
+                        <!-- Injected Weekly rows -->
+                        <div class="text-slate-300 text-sm py-2">Loading weekly outlook...</div>
+                    </div>
+                </div>
+
+            </div>
+
+        </main>
+
+        <!-- Footer -->
+        <footer class="text-center py-4 border-t border-white/10 text-xs text-cyan-200/60 flex flex-col sm:flex-row items-center justify-between gap-2">
+            <p>&copy; 2026 TCloud Weather Intelligence. All rights reserved.</p>
+            <div class="flex items-center gap-4">
+                <span>Powered by Open-Meteo & Nominatim</span>
+                <button onclick="app.speakCurrentWeather()" class="hover:text-cyan-300 transition-colors flex items-center gap-1">
+                    <i class="fa-solid fa-volume-high"></i> Listen Report
+                </button>
+            </div>
+        </footer>
+
+    </div>
+
+    <!-- Message Notification Modal / Box (No alert() used!) -->
+    <div id="notificationModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm hidden">
+        <div class="glass-panel p-6 rounded-3xl max-w-sm w-full mx-4 shadow-2xl text-center border border-white/20">
+            <div id="modalIcon" class="w-14 h-14 rounded-2xl bg-cyan-500/20 text-cyan-300 flex items-center justify-center text-2xl mx-auto mb-4">
+                <i class="fa-solid fa-circle-info"></i>
+            </div>
+            <h4 id="modalTitle" class="text-lg font-bold text-white mb-2">Notification</h4>
+            <p id="modalMessage" class="text-sm text-slate-300 mb-6">Message content goes here.</p>
+            <button onclick="app.closeModal()" class="w-full py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-white font-semibold shadow-lg transition-all">
+                Got it
+            </button>
+        </div>
+    </div>
+
+    <!-- JavaScript Application Logic -->
+    <script>
+        class TCloudApp {
+            constructor() {
+                this.currentUnit = 'C'; // 'C' or 'F'
+                this.currentCity = {
+                    name: 'London',
+                    country: 'United Kingdom',
+                    lat: 51.5074,
+                    lon: -0.1278,
+                    timezone: 'Europe/London'
+                };
+                this.weatherData = null;
+                this.timerInterval = null;
+                this.popularCities = [
+                    { name: 'London', lat: 51.5074, lon: -0.1278, country: 'UK', tz: 'Europe/London' },
+                    { name: 'Tokyo', lat: 35.6762, lon: 139.6503, country: 'Japan', tz: 'Asia/Tokyo' },
+                    { name: 'New York', lat: 40.7128, lon: -74.0060, country: 'USA', tz: 'America/New_York' },
+                    { name: 'Sydney', lat: -33.8688, lon: 151.2093, country: 'Australia', tz: 'Australia/Sydney' },
+                    { name: 'Paris', lat: 48.8566, lon: 2.3522, country: 'France', tz: 'Europe/Paris' },
+                    { name: 'Dubai', lat: 25.2048, lon: 55.2708, country: 'UAE', tz: 'Asia/Dubai' },
+                    { name: 'Singapore', lat: 1.3521, lon: 103.8198, country: 'Singapore', tz: 'Asia/Singapore' }
+                ];
+
+                this.initListeners();
+                this.renderQuickCities();
+                this.fetchWeatherForCity(this.currentCity);
+            }
+
+            initListeners() {
+                const searchInput = document.getElementById('searchInput');
+                searchInput.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        this.handleSearch();
+                    }
+                });
+            }
+
+            renderQuickCities() {
+                const container = document.getElementById('quickCities');
+                container.innerHTML = this.popularCities.map(c => `
+                    <button onclick="app.selectQuickCity('${c.name}', ${c.lat}, ${c.lon}, '${c.country}', '${c.tz}')" 
+                            class="px-3.5 py-1.5 rounded-xl glass-panel hover:bg-white/20 text-xs font-semibold whitespace-nowrap transition-all shadow-sm border border-white/15">
+                        ${c.name}
+                    </button>
+                `).join('');
+            }
+
+            selectQuickCity(name, lat, lon, country, timezone) {
+                this.currentCity = { name, country, lat, lon, timezone };
+                this.fetchWeatherForCity(this.currentCity);
+            }
+
+            async handleSearch() {
+                const query = document.getElementById('searchInput').value.trim();
+                if (!query) {
+                    this.showModal('Empty Search', 'Please enter a city or country name to search.', 'warning');
+                    return;
+                }
+
+                try {
+                    // Use Nominatim Geocoding API
+                    const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=1&language=en&format=json`);
+                    const geoData = await geoRes.json();
+
+                    if (!geoData.results || geoData.results.length === 0) {
+                        this.showModal('Location Not Found', `Could not find location "${query}". Please check the spelling and try again.`, 'error');
+                        return;
+                    }
+
+                    const loc = geoData.results[0];
+                    this.currentCity = {
+                        name: loc.name,
+                        country: loc.country || loc.admin1 || '',
+                        lat: loc.latitude,
+                        lon: loc.longitude,
+                        timezone: loc.timezone || 'UTC'
+                    };
+
+                    document.getElementById('searchInput').value = '';
+                    this.fetchWeatherForCity(this.currentCity);
+                } catch (err) {
+                    console.error(err);
+                    this.showModal('Connection Error', 'Unable to fetch location data at this moment. Please check your internet connection.', 'error');
+                }
+            }
+
+            async fetchUserLocationWeather() {
+                if (!navigator.geolocation) {
+                    this.showModal('Not Supported', 'Geolocation is not supported by your browser.', 'warning');
+                    return;
+                }
+
+                navigator.geolocation.getCurrentPosition(
+                    async (position) => {
+                        const lat = position.coords.latitude;
+                        const lon = position.coords.longitude;
+                        try {
+                            // Reverse geocode or use coordinates with generic name
+                            const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=lat=${lat}&count=1`);
+                            // Fallback if reverse geocoding is simple:
+                            this.currentCity = {
+                                name: 'Your Location',
+                                country: 'GPS Detected',
+                                lat: lat,
+                                lon: lon,
+                                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+                            };
+                            this.fetchWeatherForCity(this.currentCity);
+                        } catch (e) {
+                            this.currentCity = {
+                                name: 'Your Location',
+                                country: 'GPS',
+                                lat: lat,
+                                lon: lon,
+                                timezone: 'UTC'
+                            };
+                            this.fetchWeatherForCity(this.currentCity);
+                        }
+                    },
+                    (error) => {
+                        this.showModal('Permission Denied', 'Unable to retrieve your location. Please grant permission or use search.', 'warning');
+                    }
+                );
+            }
+
+            async fetchWeatherForCity(city) {
+                document.getElementById('cityName').innerText = city.name;
+                document.getElementById('countryBadge').innerText = city.country;
+
+                try {
+                    const url = `https://api.open-meteo.com/v1/forecast?latitude=${city.lat}&longitude=${city.lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,weather_code,wind_speed_10m,surface_pressure&hourly=temperature_2m,weather_code,is_day&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max&timezone=${encodeURIComponent(city.timezone)}`;
+                    
+                    const res = await fetch(url);
+                    const data = await res.json();
+                    this.weatherData = data;
+
+                    this.updateUI();
+                    this.startClock(city.timezone);
+                } catch (err) {
+                    console.error(err);
+                    this.showModal('Error', 'Failed to retrieve weather forecast data.', 'error');
+                }
+            }
+
+            updateUI() {
+                if (!this.weatherData) return;
+                const cur = this.weatherData.current;
+                const daily = this.weatherData.daily;
+
+                // Temperature conversion
+                const rawTemp = cur.temperature_2m;
+                const rawFeels = cur.apparent_temperature;
+                const temp = this.currentUnit === 'F' ? (rawTemp * 9/5) + 32 : rawTemp;
+                const feels = this.currentUnit === 'F' ? (rawFeels * 9/5) + 32 : rawFeels;
+
+                document.getElementById('tempMain').innerText = Math.round(temp);
+                document.getElementById('feelsLikeTemp').innerText = Math.round(feels) + '°';
+                document.getElementById('tempUnitLabel').innerText = this.currentUnit;
+
+                // Metrics
+                document.getElementById('humidityVal').innerText = cur.relative_humidity_2m + '%';
+                document.getElementById('windVal').innerText = cur.wind_speed_10m + ' km/h';
+                document.getElementById('pressureVal').innerText = cur.surface_pressure + ' hPa';
+                document.getElementById('visibilityVal').innerText = '10 km'; // default estimate
+
+                // Sunrise & Sunset
+                if (daily && daily.sunrise && daily.sunrise[0]) {
+                    const sunriseTime = new Date(daily.sunrise[0]).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    const sunsetTime = new Date(daily.sunset[0]).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    document.getElementById('sunriseVal').innerText = sunriseTime;
+                    document.getElementById('sunsetVal').innerText = sunsetTime;
+                }
+
+                // UV & AQI mockup / real
+                const uvMax = daily && daily.uv_index_max ? daily.uv_index_max[0] : 4.5;
+                document.getElementById('uvVal').innerText = `${uvMax} (${uvMax > 6 ? 'High' : 'Moderate'})`;
+
+                // Weather Code interpretation
+                const wCode = cur.weather_code;
+                const isDay = cur.is_day === 1;
+                const info = this.getWeatherInfo(wCode, isDay);
+
+                document.getElementById('conditionText').innerText = info.text;
+                document.getElementById('conditionHeaderIcon').className = info.headerIcon;
+                document.getElementById('weatherBigIcon').className = info.bigIcon;
+                document.getElementById('weatherAdvice').innerText = info.advice;
+
+                // Update Dynamic Background Video & Overlay
+                this.updateBackground(wCode, isDay);
+
+                // Render Hourly & Weekly
+                this.renderHourly();
+                this.renderWeekly();
+            }
+
+            getWeatherInfo(code, isDay) {
+                // WMO Weather interpretation codes (Open-Meteo)
+                switch (code) {
+                    case 0:
+                        return {
+                            text: isDay ? 'Sunny & Clear' : 'Clear Night',
+                            headerIcon: isDay ? 'fa-solid fa-sun' : 'fa-solid fa-moon',
+                            bigIcon: isDay ? 'fa-solid fa-sun text-amber-400' : 'fa-solid fa-moon text-indigo-200',
+                            advice: isDay ? 'Wonderful sunshine! Don\'t forget sunglasses.' : 'Crisp clear starry night skies ahead.',
+                            video: isDay ? 'https://assets.mixkit.co/videos/preview/mixkit-clouds-and-blue-sky-2408-large.mp4' : 'https://assets.mixkit.co/videos/preview/mixkit-starlight-in-the-night-sky-4247-large.mp4',
+                            gradient: isDay ? 'from-sky-600/60 via-blue-900/70 to-slate-900/90' : 'from-indigo-950/80 via-slate-900/90 to-black'
+                        };
+                    case 1:
+                    case 2:
+                    case 3:
+                        return {
+                            text: 'Partly Cloudy',
+                            headerIcon: 'fa-solid fa-cloud-sun',
+                            bigIcon: 'fa-solid fa-cloud-sun text-cyan-200',
+                            advice: 'Pleasant mix of sun and clouds. Perfect outdoor weather.',
+                            video: 'https://assets.mixkit.co/videos/preview/mixkit-clouds-and-blue-sky-2408-large.mp4',
+                            gradient: 'from-blue-800/60 via-slate-900/70 to-slate-950/90'
+                        };
+                    case 45:
+                    case 48:
+                        return {
+                            text: 'Foggy & Misty',
+                            headerIcon: 'fa-solid fa-smog',
+                            bigIcon: 'fa-solid fa-smog text-slate-300',
+                            advice: 'Low visibility. Drive with caution and wear a light jacket.',
+                            video: 'https://assets.mixkit.co/videos/preview/mixkit-mist-over-pine-trees-41551-large.mp4',
+                            gradient: 'from-slate-800/70 via-slate-900/80 to-black'
+                        };
+                    case 51:
+                    case 53:
+                    case 55:
+                    case 56:
+                    case 57:
+                    case 61:
+                    case 63:
+                    case 65:
+                        return {
+                            text: 'Rain Showers',
+                            headerIcon: 'fa-solid fa-cloud-rain',
+                            bigIcon: 'fa-solid fa-cloud-rain text-blue-300',
+                            advice: 'Rain is falling. Grab your umbrella before heading out!',
+                            video: 'https://assets.mixkit.co/videos/preview/mixkit-raindrops-falling-on-glass-1457-large.mp4',
+                            gradient: 'from-blue-950/70 via-slate-900/80 to-black'
+                        };
+                    case 71:
+                    case 73:
+                    case 75:
+                    case 77:
+                        return {
+                            text: 'Snowfall',
+                            headerIcon: 'fa-solid fa-snowflake',
+                            bigIcon: 'fa-solid fa-snowflake text-cyan-100',
+                            advice: 'Snowy conditions! Bundle up warmly and enjoy the scenery.',
+                            video: 'https://assets.mixkit.co/videos/preview/mixkit-snow-falling-in-the-woods-5099-large.mp4',
+                            gradient: 'from-slate-700/60 via-blue-950/80 to-black'
+                        };
+                    case 95:
+                    case 96:
+                    case 99:
+                        return {
+                            text: 'Thunderstorm',
+                            headerIcon: 'fa-solid fa-cloud-bolt',
+                            bigIcon: 'fa-solid fa-cloud-bolt text-amber-300',
+                            advice: 'Thunderstorm warning! Stay safe indoors if possible.',
+                            video: 'https://assets.mixkit.co/videos/preview/mixkit-lightning-in-the-night-sky-4248-large.mp4',
+                            gradient: 'from-purple-950/70 via-slate-950/90 to-black'
+                        };
+                    default:
+                        return {
+                            text: 'Fair Weather',
+                            headerIcon: 'fa-solid fa-cloud',
+                            bigIcon: 'fa-solid fa-cloud text-cyan-300',
+                            advice: 'Enjoy your day and stay hydrated!',
+                            video: 'https://assets.mixkit.co/videos/preview/mixkit-clouds-and-blue-sky-2408-large.mp4',
+                            gradient: 'from-indigo-900/60 via-slate-900/70 to-black/85'
+                        };
+                }
+            }
+
+            updateBackground(code, isDay) {
+                const info = this.getWeatherInfo(code, isDay);
+                const videoEl = document.getElementById('bgVideo');
+                const overlayEl = document.getElementById('bgOverlay');
+
+                // Update source if changed
+                if (videoEl.src !== info.video) {
+                    videoEl.src = info.video;
+                    videoEl.play().catch(e => console.log("Autoplay restricted or prevented"));
+                }
+                overlayEl.className = `absolute inset-0 bg-gradient-to-br ${info.gradient} transition-colors duration-1000`;
+            }
+
+            renderHourly() {
+                if (!this.weatherData || !this.weatherData.hourly) return;
+                const hourly = this.weatherData.hourly;
+                const container = document.getElementById('hourlyContainer');
+                
+                // Get next 24 hours starting from current hour index
+                const nowIndex = new Date().getHours();
+                let html = '';
+
+                for (let i = nowIndex; i < nowIndex + 24 && i < hourly.time.length; i++) {
+                    const timeStr = new Date(hourly.time[i]).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
+                    const rawT = hourly.temperature_2m[i];
+                    const t = this.currentUnit === 'F' ? Math.round((rawT * 9/5) + 32) : Math.round(rawT);
+                    const code = hourly.weather_code[i];
+                    const isD = hourly.is_day[i] === 1;
+                    const info = this.getWeatherInfo(code, isD);
+
+                    html += `
+                        <div class="flex flex-col items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/10 min-w-[90px] flex-shrink-0 hover:bg-white/15 transition-all">
+                            <span class="text-xs text-slate-300 font-medium">${timeStr}</span>
+                            <i class="${info.bigIcon} text-2xl my-3"></i>
+                            <span class="text-lg font-bold text-white">${t}°</span>
+                        </div>
+                    `;
+                }
+                container.innerHTML = html;
+            }
+
+            renderWeekly() {
+                if (!this.weatherData || !this.weatherData.daily) return;
+                const daily = this.weatherData.daily;
+                const container = document.getElementById('weeklyContainer');
+                let html = '';
+
+                for (let i = 0; i < daily.time.length; i++) {
+                    const dateObj = new Date(daily.time[i]);
+                    const dayName = i === 0 ? 'Today' : dateObj.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+                    const rawMax = daily.temperature_2m_max[i];
+                    const rawMin = daily.temperature_2m_min[i];
+                    const maxT = this.currentUnit === 'F' ? Math.round((rawMax * 9/5) + 32) : Math.round(rawMax);
+                    const minT = this.currentUnit === 'F' ? Math.round((rawMin * 9/5) + 32) : Math.round(rawMin);
+                    const code = daily.weather_code[i];
+                    const info = this.getWeatherInfo(code, true);
+
+                    html += `
+                        <div class="flex items-center justify-between p-3 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/15 transition-all">
+                            <div class="flex items-center gap-3 w-1/3">
+                                <i class="${info.bigIcon} text-xl w-6 text-center"></i>
+                                <span class="text-sm font-semibold text-white">${dayName}</span>
+                            </div>
+                            <div class="flex items-center gap-2 text-xs text-slate-300 w-1/3 justify-center">
+                                <span>${info.text}</span>
+                            </div>
+                            <div class="flex items-center gap-3 w-1/3 justify-end font-bold text-sm">
+                                <span class="text-white">${maxT}°</span>
+                                <span class="text-cyan-200/60 font-normal">${minT}°</span>
+                            </div>
+                        </div>
+                    `;
+                }
+                container.innerHTML = html;
+            }
+
+            startClock(timezone) {
+                if (this.timerInterval) clearInterval(this.timerInterval);
+
+                const updateTime = () => {
+                    try {
+                        const now = new Date();
+                        const timeStr = now.toLocaleTimeString([], { timeZone: timezone, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                        const dateStr = now.toLocaleDateString([], { timeZone: timezone, weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' });
+                        
+                        document.getElementById('timeString').innerText = timeStr;
+                        document.getElementById('dateString').innerText = dateStr;
+                    } catch (e) {
+                        const now = new Date();
+                        document.getElementById('timeString').innerText = now.toLocaleTimeString();
+                        document.getElementById('dateString').innerText = now.toLocaleDateString();
+                    }
+                };
+
+                updateTime();
+                this.timerInterval = setInterval(updateTime, 1000);
+            }
+
+            setUnit(unit) {
+                this.currentUnit = unit;
+                if (unit === 'C') {
+                    document.getElementById('unitCBtn').className = 'px-3 py-1.5 rounded-xl text-xs font-bold transition-all bg-white text-slate-900 shadow-md';
+                    document.getElementById('unitFBtn').className = 'px-3 py-1.5 rounded-xl text-xs font-bold transition-all text-slate-300 hover:text-white';
+                } else {
+                    document.getElementById('unitFBtn').className = 'px-3 py-1.5 rounded-xl text-xs font-bold transition-all bg-white text-slate-900 shadow-md';
+                    document.getElementById('unitCBtn').className = 'px-3 py-1.5 rounded-xl text-xs font-bold transition-all text-slate-300 hover:text-white';
+                }
+                this.updateUI();
+            }
+
+            speakCurrentWeather() {
+                if (!('speechSynthesis' in window)) {
+                    this.showModal('Speech Unsupported', 'Text-to-speech is not supported by your browser.', 'warning');
+                    return;
+                }
+
+                if (!this.weatherData) return;
+                const cur = this.weatherData.current;
+                const temp = Math.round(this.currentUnit === 'F' ? (cur.temperature_2m * 9/5) + 32 : cur.temperature_2m);
+                const city = this.currentCity.name;
+                const timeText = document.getElementById('timeString').innerText;
+                const condition = document.getElementById('conditionText').innerText;
+
+                const speechText = `Current weather report for ${city}. Local time is ${timeText}. Conditions are ${condition} with a temperature of ${temp} degrees ${this.currentUnit === 'C' ? 'Celsius' : 'Fahrenheit'}. Humidity is ${cur.relative_humidity_2m} percent and wind speed is ${cur.wind_speed_10m} kilometers per hour.`;
+
+                window.speechSynthesis.cancel(); // Stop previous speech
+                const utterance = new SpeechSynthesisUtterance(speechText);
+                utterance.rate = 1.0;
+                utterance.pitch = 1.0;
+                window.speechSynthesis.speak(utterance);
+            }
+
+            resetToDefault() {
+                this.selectQuickCity('London', 51.5074, -0.1278, 'UK', 'Europe/London');
+            }
+
+            showModal(title, message, type = 'info') {
+                document.getElementById('modalTitle').innerText = title;
+                document.getElementById('modalMessage').innerText = message;
+                const modal = document.getElementById('notificationModal');
+                modal.classList.remove('hidden');
+            }
+
+            closeModal() {
+                document.getElementById('notificationModal').classList.add('hidden');
+            }
+        }
+
+        // Initialize application on load
+        const app = new TCloudApp();
+    </script>
+</body>
+</html>
